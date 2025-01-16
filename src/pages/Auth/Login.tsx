@@ -1,19 +1,14 @@
 import { useState } from "preact/hooks";
-import { useLocation } from "preact-iso";
 import { JSX } from "preact";
-
 import styles from "./Login.module.css";
-
-import { Button } from "@components/base/buttons/Button";
-import { PasswordResetModal } from "@components/modal/PasswordResetModal";
-
-import arrowLeftIcon from "@icons/arrow-left.svg";
-import resetPasswordIcon from "@icons/reset-password.svg";
-import newUserIcon from "@icons/new-user.svg";
-
-import { RESTPostAPIAuthLoginBody } from "@foxogram/api-types";
-import { apiMethods as api } from "@services/api/authenticationService.ts";
+import { Button } from "@components/Base/Buttons/Button";
+import { PasswordResetModal } from "@components/Modal/PasswordReset/PasswordResetModal.tsx";
+import arrowLeftIcon from "@icons/navigation/arrow-left.svg";
+import resetPasswordIcon from "@icons/navigation/reset-password.svg";
+import newUserIcon from "@icons/navigation/new-user.svg";
+import { apiMethods } from "@services/api/apiMethods.ts";
 import { useAuthStore } from "@store/authenticationStore.ts";
+import { useLocation } from "preact-iso";
 
 const Login = (): JSX.Element => {
 	const [email, setEmail] = useState<string>("");
@@ -21,45 +16,50 @@ const Login = (): JSX.Element => {
 	const [emailError, setEmailError] = useState<boolean>(false);
 	const [passwordError, setPasswordError] = useState<boolean>(false);
 	const [isPasswordResetModalOpen, setPasswordResetModalOpen] = useState<boolean>(false);
+
 	const authStore = useAuthStore();
 	const location = useLocation();
+
+	const validateEmail = (email: string): boolean => {
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		return emailRegex.test(email) && email.length >= 4 && email.length <= 64;
+	};
+
+	const validatePassword = (password: string): boolean => {
+		return password.length >= 4 && password.length <= 128;
+	};
 
 	const handleLogin = async (e: Event): Promise<void> => {
 		e.preventDefault();
 
-		if (!email || !password) {
-			setEmailError(!email);
-			setPasswordError(!password);
-			return;
+		setEmailError(false);
+		setPasswordError(false);
+
+		let isValid = true;
+
+		if (!email || !validateEmail(email)) {
+			setEmailError(true);
+			isValid = false;
 		}
 
-		const body: RESTPostAPIAuthLoginBody = { email, password };
+		if (!password || !validatePassword(password)) {
+			setPasswordError(true);
+			isValid = false;
+		}
+
+		if (!isValid) return;
 
 		try {
-			const response = await api.login(body);
-			if (response.accessToken) {
-				authStore.login(response.accessToken);
-				alert("Successful login");
+			const response = await apiMethods.login(email, password);
+			if (response?.access_token) {
+				authStore.login(response.access_token);
+				console.log("Successful login");
 			} else {
-				alert("Login error. Try again");
+				console.error("Login error. Please try again.");
 			}
 		} catch (error) {
 			console.error("Error during login:", error);
-			const errorMessage = error instanceof Error ? error.message : "Unknown error";
-			alert(`Error: ${errorMessage}`);
 		}
-	};
-
-	const handleEmailInput = (e: Event): void => {
-		const value = (e.target as HTMLInputElement).value;
-		setEmail(value);
-		setEmailError(false);
-	};
-
-	const handlePasswordInput = (e: Event): void => {
-		const value = (e.target as HTMLInputElement).value;
-		setPassword(value);
-		setPasswordError(false);
 	};
 
 	const openPasswordResetModal = (): void => {
@@ -68,46 +68,6 @@ const Login = (): JSX.Element => {
 
 	const closePasswordResetModal = (): void => {
 		setPasswordResetModalOpen(false);
-	};
-
-	const sendResetEmail = async (email: string): Promise<void> => {
-		try {
-			await api.resetPassword(email);
-			alert("Reset password email sent successfully");
-		} catch (error) {
-			console.error("Error sending reset password email:", error);
-			alert("Failed to send reset password email");
-		}
-	};
-
-	const verifyResetCode = async (code: string): Promise<void> => {
-		try {
-			await api.resetPasswordConfirm(email, code, password);
-			alert("Verification code is valid");
-		} catch (error) {
-			console.error("Error verifying reset password code:", error);
-			alert("Invalid or expired code");
-		}
-	};
-
-	const resendResetCode = async (): Promise<void> => {
-		try {
-			await api.resendEmail();
-			alert("Reset password code resent");
-		} catch (error) {
-			console.error("Error resending reset password code:", error);
-			alert("Failed to resend reset password code");
-		}
-	};
-
-	const resetPassword = async (newPassword: string): Promise<void> => {
-		try {
-			await api.resetPasswordConfirm(email, "", newPassword);
-			alert("Password reset successfully");
-		} catch (error) {
-			console.error("Error resetting password:", error);
-			alert("Failed to reset password");
-		}
 	};
 
 	return (
@@ -119,26 +79,38 @@ const Login = (): JSX.Element => {
 							<div className={styles["login-title"]}>Log in</div>
 							<div className={styles["form-login"]}>
 								<div className={styles["login"]}>
-									<label className={styles["login-label"]}>Email<span className={styles["required"]}>*</span></label>
+									<label className={styles["login-label"]}>
+										Email<span className={styles["required"]}>*</span>
+									</label>
 									<input
 										type="email"
 										className={`${styles["login-input"]} ${emailError ? styles["input-error"] : ""}`}
 										placeholder="floofer@coof.fox"
 										value={email}
-										onInput={handleEmailInput}
+										onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+										onBlur={() => setEmailError(!validateEmail(email))}
 										required
 									/>
-									<label className={styles["login-label"]}>Password<span className={styles["required"]}>*</span></label>
+									{emailError && (
+										<span className={`${styles["error-text"]}`} style={{ top: "18%", left: "70px" }}>— Incorrect format</span>
+									)}
+									<label className={styles["login-label"]}>
+										Password<span className={styles["required"]}>*</span>
+									</label>
 									<input
 										type="password"
 										className={`${styles["login-input"]} ${passwordError ? styles["input-error"] : ""}`}
 										placeholder="your floof password :3"
 										value={password}
-										onInput={handlePasswordInput}
+										onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
 										required
 									/>
+									{passwordError && (
+										<span className={`${styles["error-text"]}`} style={{ top: "39.5%", left: "107px" }}>— Incorrect format</span>
+									)}
 								</div>
 							</div>
+
 						</div>
 						<div className={styles["login-button"]}>
 							<Button variant="primary" onClick={handleLogin} icon={arrowLeftIcon}>
@@ -146,11 +118,11 @@ const Login = (): JSX.Element => {
 							</Button>
 						</div>
 						<div className={styles["divider"]} />
-						<div className={styles["social-buttons"]}>
+						<div className={styles["action-Buttons"]}>
 							<Button variant="secondary" onClick={openPasswordResetModal} icon={resetPasswordIcon}>
 								Reset your password
 							</Button>
-							<Button variant="secondary" onClick={() => { location.route("/auth/register"); }} icon={newUserIcon}>
+							<Button variant="secondary" onClick={() => {location.route("/auth/register")}} icon={newUserIcon}>
 								Create new account
 							</Button>
 						</div>
@@ -161,10 +133,10 @@ const Login = (): JSX.Element => {
 				isOpen={isPasswordResetModalOpen}
 				email={email}
 				onClose={closePasswordResetModal}
-				onSendEmail={sendResetEmail}
-				onVerifyCode={verifyResetCode}
-				onResendCode={resendResetCode}
-				onResetPassword={resetPassword}
+				onSendEmail={apiMethods.resetPassword}
+				onVerifyCode={(code) => apiMethods.confirmResetPassword(email, code, password)}
+				onResetPassword={apiMethods.resetPassword}
+				onResendCode={apiMethods.resendEmailVerification}
 			/>
 		</div>
 	);
